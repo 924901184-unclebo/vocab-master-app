@@ -1,0 +1,99 @@
+<!-- 添加页 -->
+<view class="page-container">
+
+  <!-- 标题 -->
+  <view class="page-header">
+    <image src="/images/icon-sparkle.svg" class="header-icon" mode="aspectFit" />
+    <view class="header-text">
+      <text class="header-title">智能提取</text>
+      <text class="header-desc">粘贴文章链接，AI 自动识别专业英文术语</text>
+    </view>
+  </view>
+
+  <!-- URL 输入区 -->
+  <view class="input-section glass-card">
+    <view class="input-row">
+      <image src="/images/icon-link.svg" class="input-icon" mode="aspectFit" />
+      <input
+        class="url-input"
+        placeholder="粘贴文章链接..."
+        value="{{url}}"
+        bindinput="onUrlInput"
+        confirm-type="go"
+        bindconfirm="onParse"
+      />
+    </view>
+    <button
+      class="btn-primary parse-btn"
+      bindtap="onParse"
+      disabled="{{loading}}"
+    >
+      <image wx:if="{{loading}}" src="/images/icon-loading.svg" class="icon-spin icon-sm" mode="aspectFit" />
+      <text>{{loading ? '解析中...' : '解析文章'}}</text>
+    </button>
+  </view>
+
+  <!-- 进度条 -->
+  <view class="progress-section" wx:if="{{loading || showResult}}">
+    <view class="progress-header">
+      <text class="progress-stage">{{loadingStage}}</text>
+      <text class="progress-pct">{{progress}}%</text>
+    </view>
+    <view class="progress-track">
+      <view class="progress-bar" style="width: {{progress}}%"></view>
+    </view>
+  </view>
+
+  <!-- 提取结果列表 -->
+  <view class="result-section" wx:if="{{showResult && terms.length > 0}}">
+    <view class="result-header">
+      <text class="result-count">提取到 {{terms.length}} 个术语</text>
+      <text class="toggle-all" bindtap="onToggleAll">
+        {{selectedCount === terms.length ? '取消全选' : '全选'}}
+      </text>
+    </view>
+
+    <scroll-view class="term-list" scroll-y>
+      <view
+        class="term-item glass-card {{item.existsInLibrary ? 'item-disabled' : ''}}"
+        wx:for="{{terms}}"
+        wx:key="term"
+        bindtap="onToggle"
+        data-index="{{index}}"
+      >
+        <view class="term-check">
+          <view wx:if="{{item.existsInLibrary}}" class="check-exists">✓</view>
+          <view wx:elif="{{item.selected}}" class="check-on"></view>
+          <view wx:else class="check-off"></view>
+        </view>
+        <view class="term-info">
+          <view class="term-name-row">
+            <text class="term-name">{{item.term}}</text>
+            <text wx:if="{{item.existsInLibrary}}" class="tag-exists">已存在</text>
+          </view>
+          <text class="term-meaning">{{item.meaning}}</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 确认入库 -->
+    <view class="confirm-bar">
+      <button
+        class="btn-primary"
+        bindtap="onConfirm"
+        disabled="{{selectedCount === 0}}"
+      >
+        确认入库 ({{selectedCount}})
+      </button>
+    </view>
+  </view>
+
+  <!-- 空引导 -->
+  <view class="empty-guide" wx:if="{{!showResult && !loading}}">
+    <view class="guide-icon-wrap">
+      <image src="/images/icon-file.svg" class="guide-icon" mode="aspectFit" />
+    </view>
+    <text class="guide-text">输入文章链接后点击「解析文章」，AI 将自动提取专业术语</text>
+  </view>
+
+</view>

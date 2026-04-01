@@ -1,0 +1,96 @@
+<!-- 词库页 -->
+<view class="page-container">
+
+  <!-- 标题 -->
+  <view class="page-header">
+    <image src="/images/icon-book.svg" class="header-icon" mode="aspectFit" />
+    <view class="header-text">
+      <text class="header-title">词库</text>
+      <text class="header-desc">共 {{total}} 个术语</text>
+    </view>
+  </view>
+
+  <!-- 搜索栏 -->
+  <view class="search-bar glass-card">
+    <image src="/images/icon-search.svg" class="search-icon" mode="aspectFit" />
+    <input
+      class="search-input"
+      placeholder="搜索术语或释义..."
+      value="{{searchQuery}}"
+      bindinput="onSearchInput"
+    />
+    <view class="clear-btn" wx:if="{{searchQuery}}" bindtap="onClearSearch">
+      <text class="clear-x">✕</text>
+    </view>
+  </view>
+
+  <!-- 搜索结果提示 -->
+  <view class="search-hint" wx:if="{{searching}}">
+    <text>找到 {{groups.length > 0 ? groups.reduce((a,g)=>a+g.items.length, 0) : 0}} 个结果</text>
+  </view>
+
+  <!-- 加载中 -->
+  <view class="center-state" wx:if="{{loading}}">
+    <view class="loading-spinner"></view>
+    <text class="state-text">加载中...</text>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="center-state" wx:elif="{{groups.length === 0}}">
+    <image src="/images/icon-search.svg" class="empty-search-icon" mode="aspectFit" />
+    <text class="state-text">{{searching ? '没有找到匹配的术语' : '词库为空'}}</text>
+  </view>
+
+  <!-- 按字母分组列表 -->
+  <scroll-view class="word-list" scroll-y wx:else>
+    <view class="letter-group" wx:for="{{groups}}" wx:key="letter">
+      <!-- 字母头 -->
+      <view class="letter-header">
+        <view class="letter-badge">{{item.letter}}</view>
+        <view class="letter-line"></view>
+      </view>
+
+      <!-- 词条 -->
+      <view class="word-item glass-card" wx:for="{{item.items}}" wx:for-item="word" wx:key="id">
+        <!-- 概要行 -->
+        <view class="word-summary" bindtap="onToggleExpand" data-id="{{word.id}}">
+          <view class="word-brief">
+            <text class="word-term">{{word.term}}</text>
+            <text class="word-meaning-short">{{word.meaning}}</text>
+          </view>
+          <text class="expand-arrow {{expandedId === word.id ? 'expanded' : ''}}">›</text>
+        </view>
+
+        <!-- 展开详情 -->
+        <view class="word-detail" wx:if="{{expandedId === word.id}}">
+          <view class="detail-divider"></view>
+
+          <text class="detail-phonetic" wx:if="{{word.phonetic}}">{{word.phonetic}}</text>
+          <text class="detail-meaning">{{word.meaning}}</text>
+          <text class="detail-context" wx:if="{{word.context}}">"{{word.context}}"</text>
+
+          <!-- 操作按钮 -->
+          <view class="detail-actions">
+            <button class="action-btn" bindtap="onSpeak" data-term="{{word.term}}">
+              <image src="/images/icon-volume.svg" class="action-icon" mode="aspectFit" />
+              <text>发音</text>
+            </button>
+            <button class="action-btn" bindtap="onViewCard">
+              <image src="/images/icon-card.svg" class="action-icon" mode="aspectFit" />
+              <text>词卡</text>
+            </button>
+            <view class="action-spacer"></view>
+            <button class="action-btn action-danger" bindtap="onDelete" data-id="{{word.id}}" data-term="{{word.term}}">
+              <image src="/images/icon-trash.svg" class="action-icon" mode="aspectFit" />
+              <text>删除</text>
+            </button>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部安全区 -->
+    <view style="height: 32rpx"></view>
+  </scroll-view>
+
+</view>

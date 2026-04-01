@@ -1,0 +1,19 @@
+{
+  "name": "vocab-master-server",
+  "version": "1.0.0",
+  "description": "VocabMaster 专业词汇复习小程序 - 后端服务",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "dev": "node --watch server/app.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "mysql2": "^3.11.0",
+    "axios": "^1.7.7",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "uuid": "^10.0.0"
+  }
+}

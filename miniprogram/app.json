@@ -1,0 +1,42 @@
+{
+  "pages": [
+    "pages/cards/cards",
+    "pages/add/add",
+    "pages/library/library"
+  ],
+  "window": {
+    "navigationBarTitleText": "VocabMaster",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F5F7FA",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#94a3b8",
+    "selectedColor": "#3b82f6",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/cards/cards",
+        "text": "词卡",
+        "iconPath": "images/tab-cards.png",
+        "selectedIconPath": "images/tab-cards-active.png"
+      },
+      {
+        "pagePath": "pages/add/add",
+        "text": "添加",
+        "iconPath": "images/tab-add.png",
+        "selectedIconPath": "images/tab-add-active.png"
+      },
+      {
+        "pagePath": "pages/library/library",
+        "text": "词库",
+        "iconPath": "images/tab-library.png",
+        "selectedIconPath": "images/tab-library-active.png"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
+}

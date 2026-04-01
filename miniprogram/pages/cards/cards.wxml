@@ -1,0 +1,88 @@
+<!-- 词卡复习页 -->
+<view class="page-container">
+
+  <!-- 顶部进度 -->
+  <view class="header" wx:if="{{!isEmpty && !loading}}">
+    <view class="progress-info">
+      <view class="dot"></view>
+      <text class="counter">{{current + 1}} / {{total}}</text>
+    </view>
+    <view class="btn-ghost speak-btn" bindtap="onSpeak">
+      <image src="/images/icon-volume.svg" class="icon-sm" mode="aspectFit" />
+    </view>
+  </view>
+
+  <!-- 进度条 -->
+  <view class="progress-wrap" wx:if="{{!isEmpty && !loading}}">
+    <view class="progress-track">
+      <view class="progress-bar" style="width: {{(current + 1) / total * 100}}%"></view>
+    </view>
+  </view>
+
+  <!-- 加载中 -->
+  <view class="center-state" wx:if="{{loading}}">
+    <view class="loading-spinner"></view>
+    <text class="state-text">加载中...</text>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="center-state" wx:elif="{{isEmpty}}">
+    <image src="/images/empty-state.png" class="empty-img" mode="aspectFit" />
+    <text class="state-title">词库空空如也</text>
+    <text class="state-text">点击下方「添加」标签，粘贴文章链接开始提取术语吧</text>
+  </view>
+
+  <!-- Swiper 词卡 -->
+  <swiper
+    wx:else
+    class="card-swiper"
+    current="{{current}}"
+    bindchange="onSwiperChange"
+    duration="300"
+    easing-function="easeInOutCubic"
+    circular="{{true}}"
+  >
+    <swiper-item wx:for="{{list}}" wx:key="id">
+      <view class="vocab-card glass-card">
+        <!-- 术语 -->
+        <text class="card-term">{{item.term}}</text>
+
+        <!-- 音标 -->
+        <text class="card-phonetic" wx:if="{{item.phonetic}}">{{item.phonetic}}</text>
+
+        <!-- 分割线 -->
+        <view class="divider"></view>
+
+        <!-- 释义 -->
+        <text class="card-meaning">{{item.meaning}}</text>
+
+        <!-- 语境 -->
+        <view class="card-context" wx:if="{{item.context}}">
+          <text class="context-text">"{{item.context}}"</text>
+        </view>
+
+        <!-- 来源 -->
+        <view class="card-source" wx:if="{{item.source_url || item.sourceUrl}}">
+          <image src="/images/icon-link.svg" class="icon-xs" mode="aspectFit" />
+          <text class="source-text">查看来源</text>
+        </view>
+
+        <!-- 滑动提示 -->
+        <view class="swipe-hint">
+          <text class="hint-arrow">‹</text>
+          <text class="hint-text">左右滑动切换</text>
+          <text class="hint-arrow">›</text>
+        </view>
+      </view>
+    </swiper-item>
+  </swiper>
+
+  <!-- 底部换一批按钮 -->
+  <view class="bottom-action" wx:if="{{!isEmpty && !loading}}">
+    <button class="refresh-btn glass-card" bindtap="onRefresh">
+      <image src="/images/icon-refresh.svg" class="icon-sm" mode="aspectFit" />
+      <text class="refresh-text">换一批</text>
+    </button>
+  </view>
+
+</view>
