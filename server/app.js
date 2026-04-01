@@ -33,6 +33,15 @@ app.get('/', (_req, res) => {
   });
 });
 
+// ---- 微信云托管探活路径（兼容 /api/count） ----
+app.get('/api/count', async (_req, res) => {
+  try {
+    res.json({ code: 0, data: { status: 'ok', db: db.isMySQL() ? 'mysql' : 'memory' } });
+  } catch {
+    res.json({ code: 0, data: { status: 'ok' } });
+  }
+});
+
 // ---- API 路由 ----
 app.use('/api/auth', authRoutes);
 app.use('/api/vocab', vocabRoutes);
