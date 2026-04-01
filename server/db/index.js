@@ -1,72 +1,126 @@
 /**
- * 数据库层 —— 本地 SQLite / 云托管 MySQL 自动切换
+ * 数据库层 —— 本地内存 / 云托管 MySQL 自动切换
  *
- * 本地开发无需安装 MySQL，使用内存 Map 模拟（零依赖）。
- * 部署到微信云托管后，通过 MYSQL_ADDRESS 环境变量自动切换到 MySQL。
+ * 修复云托管部署问题：
+ * 1. 自动创建数据库（云托管不预建库）
+ * 2. 连接失败不阻塞启动，带重试机制
+ * 3. DB 未就绪时 API 降级为内存模式
  */
 const mysql = require('mysql2/promise');
 const config = require('../config');
 
 let pool = null;
+let dbReady = false;
 
 // ============================================================
-// 初始化
+// 初始化（不抛异常，不阻塞启动）
 // ============================================================
 async function init() {
   if (!config.useMySQL) {
     console.log('[DB] 本地开发模式 —— 使用内存存储');
+    dbReady = true;
     return;
   }
 
-  console.log(`[DB] 连接 MySQL: ${config.mysql.host}:${config.mysql.port}`);
-  pool = mysql.createPool({
-    host: config.mysql.host,
-    port: config.mysql.port,
-    user: config.mysql.user,
-    password: config.mysql.password,
-    database: config.mysql.database,
-    waitForConnections: true,
-    connectionLimit: 10,
-    charset: 'utf8mb4',
+  // 异步初始化，不阻塞 HTTP 服务启动
+  initMySQL().catch(err => {
+    console.error('[DB] MySQL 初始化最终失败，降级为内存模式:', err.message);
   });
+}
 
-  // 建表
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS t_user (
-      id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-      openid      VARCHAR(64)  NOT NULL UNIQUE,
-      session_key VARCHAR(128) DEFAULT '',
-      nickname    VARCHAR(64)  DEFAULT '',
-      avatar_url  VARCHAR(512) DEFAULT '',
-      created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
-      updated_at  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  `);
+async function initMySQL(retries = 5) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[DB] 第 ${attempt}/${retries} 次尝试连接 MySQL: ${config.mysql.host}:${config.mysql.port}`);
 
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS t_vocabulary (
-      id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-      user_id     BIGINT       NOT NULL,
-      term        VARCHAR(128) NOT NULL,
-      meaning     VARCHAR(512) NOT NULL,
-      phonetic    VARCHAR(128) DEFAULT '',
-      context     VARCHAR(1024) DEFAULT '',
-      source_url  VARCHAR(1024) DEFAULT '',
-      created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uk_user_term (user_id, term),
-      INDEX idx_user_id (user_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  `);
+      // 1. 先不指定数据库，连接 MySQL 实例
+      const tempConn = await mysql.createConnection({
+        host: config.mysql.host,
+        port: config.mysql.port,
+        user: config.mysql.user,
+        password: config.mysql.password,
+        charset: 'utf8mb4',
+        connectTimeout: 10000,
+      });
 
-  console.log('[DB] MySQL 初始化完成');
+      // 2. 自动创建数据库（如果不存在）
+      await tempConn.execute(
+        `CREATE DATABASE IF NOT EXISTS \`${config.mysql.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci`
+      );
+      console.log(`[DB] 数据库 "${config.mysql.database}" 已就绪`);
+      await tempConn.end();
+
+      // 3. 创建连接池（指定数据库）
+      pool = mysql.createPool({
+        host: config.mysql.host,
+        port: config.mysql.port,
+        user: config.mysql.user,
+        password: config.mysql.password,
+        database: config.mysql.database,
+        waitForConnections: true,
+        connectionLimit: 10,
+        charset: 'utf8mb4',
+        connectTimeout: 10000,
+      });
+
+      // 4. 验证连接
+      const conn = await pool.getConnection();
+      conn.release();
+
+      // 5. 建表
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS t_user (
+          id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+          openid      VARCHAR(64)  NOT NULL UNIQUE,
+          session_key VARCHAR(128) DEFAULT '',
+          nickname    VARCHAR(64)  DEFAULT '',
+          avatar_url  VARCHAR(512) DEFAULT '',
+          created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+          updated_at  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS t_vocabulary (
+          id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+          user_id     BIGINT       NOT NULL,
+          term        VARCHAR(128) NOT NULL,
+          meaning     VARCHAR(512) NOT NULL,
+          phonetic    VARCHAR(128) DEFAULT '',
+          context     VARCHAR(1024) DEFAULT '',
+          source_url  VARCHAR(1024) DEFAULT '',
+          created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uk_user_term (user_id, term),
+          INDEX idx_user_id (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+
+      dbReady = true;
+      console.log('[DB] ✅ MySQL 初始化完成');
+      return; // 成功，退出重试
+
+    } catch (err) {
+      console.error(`[DB] 第 ${attempt} 次连接失败: ${err.message}`);
+      if (attempt < retries) {
+        const delay = attempt * 3000; // 3s, 6s, 9s, 12s, 15s
+        console.log(`[DB] ${delay / 1000}s 后重试...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+}
+
+/** 是否使用 MySQL（已连接且就绪） */
+function isMySQL() {
+  return pool !== null && dbReady;
 }
 
 // ============================================================
-// 内存存储（本地开发用）
+// 内存存储（本地开发 & MySQL 降级兜底）
 // ============================================================
 const memStore = {
-  users: [],       // { id, openid, sessionKey, nickname, avatarUrl, createdAt }
-  vocabulary: [],  // { id, userId, term, meaning, phonetic, context, sourceUrl, createdAt }
+  users: [],
+  vocabulary: [],
   _userId: 0,
   _vocabId: 0,
 };
@@ -75,7 +129,7 @@ const memStore = {
 // User 操作
 // ============================================================
 async function findUserByOpenid(openid) {
-  if (pool) {
+  if (isMySQL()) {
     const [rows] = await pool.execute('SELECT * FROM t_user WHERE openid = ?', [openid]);
     return rows[0] || null;
   }
@@ -83,7 +137,7 @@ async function findUserByOpenid(openid) {
 }
 
 async function createUser(openid, sessionKey) {
-  if (pool) {
+  if (isMySQL()) {
     const [result] = await pool.execute(
       'INSERT INTO t_user (openid, session_key) VALUES (?, ?)',
       [openid, sessionKey]
@@ -103,7 +157,7 @@ async function createUser(openid, sessionKey) {
 }
 
 async function updateUserSession(id, sessionKey) {
-  if (pool) {
+  if (isMySQL()) {
     await pool.execute('UPDATE t_user SET session_key = ? WHERE id = ?', [sessionKey, id]);
     return;
   }
@@ -115,7 +169,7 @@ async function updateUserSession(id, sessionKey) {
 // Vocabulary 操作
 // ============================================================
 async function getVocabList(userId) {
-  if (pool) {
+  if (isMySQL()) {
     const [rows] = await pool.execute(
       'SELECT * FROM t_vocabulary WHERE user_id = ? ORDER BY term ASC',
       [userId]
@@ -128,7 +182,7 @@ async function getVocabList(userId) {
 }
 
 async function getVocabBatch(userId, limit = 10) {
-  if (pool) {
+  if (isMySQL()) {
     const [rows] = await pool.execute(
       'SELECT * FROM t_vocabulary WHERE user_id = ? ORDER BY RAND() LIMIT ?',
       [userId, limit]
@@ -142,7 +196,7 @@ async function getVocabBatch(userId, limit = 10) {
 
 async function searchVocab(userId, query) {
   const q = `%${query}%`;
-  if (pool) {
+  if (isMySQL()) {
     const [rows] = await pool.execute(
       `SELECT * FROM t_vocabulary WHERE user_id = ?
        AND (LOWER(term) LIKE LOWER(?) OR LOWER(meaning) LIKE LOWER(?))
@@ -159,7 +213,7 @@ async function searchVocab(userId, query) {
 }
 
 async function vocabExists(userId, term) {
-  if (pool) {
+  if (isMySQL()) {
     const [rows] = await pool.execute(
       'SELECT id FROM t_vocabulary WHERE user_id = ? AND LOWER(term) = LOWER(?)',
       [userId, term]
@@ -172,7 +226,7 @@ async function vocabExists(userId, term) {
 }
 
 async function addVocab(userId, { term, meaning, phonetic, context, sourceUrl }) {
-  if (pool) {
+  if (isMySQL()) {
     const [result] = await pool.execute(
       `INSERT IGNORE INTO t_vocabulary (user_id, term, meaning, phonetic, context, source_url)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -180,7 +234,6 @@ async function addVocab(userId, { term, meaning, phonetic, context, sourceUrl })
     );
     return result.insertId;
   }
-  // 内存去重
   if (await vocabExists(userId, term)) return null;
   const vocab = {
     id: ++memStore._vocabId,
@@ -212,7 +265,7 @@ async function batchAddVocab(userId, words, sourceUrl) {
 }
 
 async function deleteVocab(userId, vocabId) {
-  if (pool) {
+  if (isMySQL()) {
     const [result] = await pool.execute(
       'DELETE FROM t_vocabulary WHERE id = ? AND user_id = ?',
       [vocabId, userId]
@@ -226,7 +279,7 @@ async function deleteVocab(userId, vocabId) {
 }
 
 async function countVocab(userId) {
-  if (pool) {
+  if (isMySQL()) {
     const [rows] = await pool.execute(
       'SELECT COUNT(*) AS cnt FROM t_vocabulary WHERE user_id = ?',
       [userId]
@@ -238,6 +291,7 @@ async function countVocab(userId) {
 
 module.exports = {
   init,
+  isMySQL,
   findUserByOpenid,
   createUser,
   updateUserSession,

@@ -3,6 +3,20 @@
  */
 require('dotenv').config();
 
+// 解析 MYSQL_ADDRESS（兼容多种格式）
+function parseMySQLAddress(addr) {
+  if (!addr) return { host: 'localhost', port: 3306 };
+  // 去掉可能的协议头
+  addr = addr.replace(/^mysql:\/\//, '').replace(/\/.*$/, '');
+  const parts = addr.split(':');
+  return {
+    host: parts[0] || 'localhost',
+    port: parseInt(parts[1]) || 3306,
+  };
+}
+
+const mysqlAddr = parseMySQLAddress(process.env.MYSQL_ADDRESS);
+
 module.exports = {
   port: process.env.PORT || 80,
 
@@ -14,8 +28,8 @@ module.exports = {
 
   // MySQL（微信云托管注入的环境变量）
   mysql: {
-    host: (process.env.MYSQL_ADDRESS || 'localhost:3306').split(':')[0],
-    port: parseInt((process.env.MYSQL_ADDRESS || 'localhost:3306').split(':')[1] || '3306'),
+    host: mysqlAddr.host,
+    port: mysqlAddr.port,
     user: process.env.MYSQL_USERNAME || 'root',
     password: process.env.MYSQL_PASSWORD || '',
     database: process.env.MYSQL_DATABASE || 'vocab_master',
